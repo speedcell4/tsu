@@ -1,6 +1,6 @@
 from aku import Aku
 
-from tsu.lse import lse
+from tsu.lse import run_lse
 
 aku = Aku()
 
@@ -10,7 +10,7 @@ def hello():
     print('hello, world!')
 
 
-aku.register(lse)
+aku.register(run_lse)
 
 if __name__ == '__main__':
     aku.run()

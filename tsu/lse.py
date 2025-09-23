@@ -6,6 +6,28 @@ from torch import Tensor
 
 
 @triton.jit
+def load_block(block_ptr, boundary_check, value):
+    x = tl.load(block_ptr, boundary_check=boundary_check, padding_option='nan')
+    return tl.where(x != x, value, x)
+
+
+@triton.jit
+def init_lse(x: tl.tensor, BLOCK_N: tl.constexpr):
+    m = tl.full((BLOCK_N,), dtype=x.dtype.element_ty, value=-float('inf'))
+    lse = tl.zeros((BLOCK_N,), dtype=x.dtype.element_ty)
+
+    return lse, m
+
+
+@triton.jit
+def update_lse(x: tl.tensor, lse: tl.tensor, m: tl.tensor):
+    m, mp = tl.maximum(m, tl.max(x, axis=1)), m
+    lse = lse * tl.exp(mp - m) + tl.sum(tl.exp(x - m[:, None]), axis=1)
+
+    return lse, m
+
+
+@triton.jit
 def lse_fwd_kernel(
         x: tl.tensor, x_s0, x_s1,
         o: tl.tensor, o_s0,
@@ -20,15 +42,11 @@ def lse_fwd_kernel(
         order=(1, 0),
     )
 
-    m = tl.full((BLOCK_N,), dtype=x.dtype.element_ty, value=-float('inf'))
-    lse = tl.zeros((BLOCK_N,), dtype=x.dtype.element_ty)
+    lse, x_m = init_lse(x, BLOCK_N)
 
     for _ in tl.range(0, D, BLOCK_D):
-        xs = tl.load(x_bp, boundary_check=(0, 1), padding_option='nan')
-        xs = tl.where(xs != xs, -float('inf'), xs)
-
-        m, mp = tl.maximum(m, tl.max(xs, axis=1)), m
-        lse = lse * tl.exp(mp - m) + tl.sum(tl.exp(xs - m[:, None]), axis=1)
+        xs = load_block(x_bp, boundary_check=(0, 1), value=-float('inf'))
+        lse, x_m = update_lse(xs, lse, x_m)
 
         x_bp = tl.advance(x_bp, offsets=(0, BLOCK_D))
 
@@ -41,7 +59,7 @@ def lse_fwd_kernel(
         order=(0,),
     )
 
-    tl.store(o_bp, (tl.log(lse) + m).to(dtype=o.dtype.element_ty), boundary_check=(0,))
+    tl.store(o_bp, (tl.log(lse) + x_m).to(dtype=o.dtype.element_ty), boundary_check=(0,))
 
 
 def lse_fwd(x: Tensor, BLOCK: int = 128):
@@ -56,7 +74,7 @@ def lse_fwd(x: Tensor, BLOCK: int = 128):
     return o
 
 
-def lse(n: int = 3, d: int = 1000):
+def run_lse(n: int = 3, d: int = 1000):
     x = torch.randn((n, d)).cuda()
     actual = lse_fwd(x)
     expected = x.logsumexp(dim=-1)
