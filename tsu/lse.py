@@ -1,4 +1,3 @@
-import torch
 import triton
 import triton.language as tl
 
@@ -6,9 +5,9 @@ from torch import Tensor
 
 
 @triton.jit
-def load_block(block_ptr, boundary_check, value):
+def load_block(block_ptr, boundary_check, other):
     x = tl.load(block_ptr, boundary_check=boundary_check, padding_option='nan')
-    return tl.where(x != x, value, x)
+    return tl.where(x != x, other, x)
 
 
 @triton.jit
@@ -45,14 +44,14 @@ def lse_fwd_kernel(
     lse, x_m = init_lse(x, BLOCK_N)
 
     for _ in tl.range(0, D, BLOCK_D):
-        xs = load_block(x_bp, boundary_check=(0, 1), value=-float('inf'))
+        xs = load_block(x_bp, boundary_check=(0, 1), other=-float('inf'))
         lse, x_m = update_lse(xs, lse, x_m)
 
         x_bp = tl.advance(x_bp, offsets=(0, BLOCK_D))
 
     o_bp = tl.make_block_ptr(
         base=o,
-        shape=(BLOCK_N,),
+        shape=(N,),
         strides=(o_s0,),
         offsets=(BLOCK_N * tl.program_id(0),),
         block_shape=(BLOCK_N,),
@@ -72,13 +71,3 @@ def lse_fwd(x: Tensor, BLOCK: int = 128):
         N, BLOCK, D, BLOCK,
     )
     return o
-
-
-def run_lse(n: int = 3, d: int = 1000):
-    x = torch.randn((n, d)).cuda()
-    actual = lse_fwd(x)
-    expected = x.logsumexp(dim=-1)
-    print(actual)
-    print(expected)
-
-    torch.testing.assert_close(actual, expected)

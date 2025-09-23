@@ -14,3 +14,9 @@ dependencies = [
     "torchvision>=0.23.0",
     "transformers>=4.56.2",
 ]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.140.2",
+    "pytest>=8.4.2",
+]
