@@ -11,19 +11,19 @@ def load_block(block_ptr, boundary_check, other):
 
 
 @triton.jit
-def init_lse(x: tl.tensor, BLOCK_N: tl.constexpr):
+def init_se(x: tl.tensor, BLOCK_N: tl.constexpr):
     m = tl.full((BLOCK_N,), dtype=x.dtype.element_ty, value=-float('inf'))
-    lse = tl.zeros((BLOCK_N,), dtype=x.dtype.element_ty)
+    se = tl.zeros((BLOCK_N,), dtype=x.dtype.element_ty)
 
-    return lse, m
+    return se, m
 
 
 @triton.jit
-def update_lse(x: tl.tensor, lse: tl.tensor, m: tl.tensor):
+def update_se(x: tl.tensor, se: tl.tensor, m: tl.tensor):
     m, mp = tl.maximum(m, tl.max(x, axis=1)), m
-    lse = lse * tl.exp(mp - m) + tl.sum(tl.exp(x - m[:, None]), axis=1)
+    se = se * tl.exp(mp - m) + tl.sum(tl.exp(x - m[:, None]), axis=1)
 
-    return lse, m
+    return se, m
 
 
 @triton.jit
@@ -32,7 +32,7 @@ def lse_fwd_kernel(
         o_ptr: tl.tensor, o_s0,
         N: tl.constexpr, BLOCK_N: tl.constexpr,
         D: tl.constexpr, BLOCK_D: tl.constexpr):
-    x_bp = tl.make_block_ptr(
+    x_block = tl.make_block_ptr(
         base=x_ptr,
         shape=(N, D),
         strides=(x_s0, x_s1),
@@ -41,15 +41,15 @@ def lse_fwd_kernel(
         order=(1, 0),
     )
 
-    lse, x_m = init_lse(x_ptr, BLOCK_N)
+    se, x_m = init_se(x_ptr, BLOCK_N)
 
     for _ in tl.range(0, D, BLOCK_D):
-        xs = load_block(x_bp, boundary_check=(0, 1), other=-float('inf'))
-        lse, x_m = update_lse(xs, lse, x_m)
+        xs = load_block(x_block, boundary_check=(0, 1), other=-float('inf'))
+        se, x_m = update_se(xs, se, x_m)
 
-        x_bp = tl.advance(x_bp, offsets=(0, BLOCK_D))
+        x_block = tl.advance(x_block, offsets=(0, BLOCK_D))
 
-    o_bp = tl.make_block_ptr(
+    o_block = tl.make_block_ptr(
         base=o_ptr,
         shape=(N,),
         strides=(o_s0,),
@@ -58,7 +58,7 @@ def lse_fwd_kernel(
         order=(0,),
     )
 
-    tl.store(o_bp, (tl.log(lse) + x_m).to(dtype=o_ptr.dtype.element_ty), boundary_check=(0,))
+    tl.store(o_block, (tl.log(se) + x_m).to(dtype=o_ptr.dtype.element_ty), boundary_check=(0,))
 
 
 def lse_fwd(x: Tensor, BLOCK: int = 128):

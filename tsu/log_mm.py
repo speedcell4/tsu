@@ -13,7 +13,7 @@ def log_mm_fwd_kernel(
         M: tl.constexpr, BLOCK_M: tl.constexpr,
         N: tl.constexpr, BLOCK_N: tl.constexpr,
         K: tl.constexpr, BLOCK_K: tl.constexpr):
-    x_bp = tl.make_block_ptr(
+    x_block = tl.make_block_ptr(
         base=x_ptr,
         shape=(M, K),
         strides=(x_s0, x_s1),
@@ -22,7 +22,7 @@ def log_mm_fwd_kernel(
         order=(1, 0),
     )
 
-    y_bp = tl.make_block_ptr(
+    y_block = tl.make_block_ptr(
         base=y_ptr,
         shape=(K, N),
         strides=(y_s0, y_s1),
@@ -35,20 +35,20 @@ def log_mm_fwd_kernel(
     m = tl.full((BLOCK_M, BLOCK_N), dtype=tl.float32, value=-float('inf'))
 
     for _ in tl.range(0, K, BLOCK_K):
-        x = tl.load(x_bp, boundary_check=(0, 1), padding_option='nan')
+        x = tl.load(x_block, boundary_check=(0, 1), padding_option='nan')
         x = tl.where(x != x, -float('inf'), x).to(dtype=tl.float32)
 
-        y = tl.load(y_bp, boundary_check=(0, 1), padding_option='nan')
+        y = tl.load(y_block, boundary_check=(0, 1), padding_option='nan')
         y = tl.where(y != y, -float('inf'), y).to(dtype=tl.float32)
 
         z = x[:, :, None] + y[None, :, :]
         m, mp = tl.maximum(m, tl.max(z, axis=1)), m
         se = se * tl.exp(mp - m) + tl.sum(tl.exp(z - m[:, None, :]), axis=1)
 
-        x_bp = tl.advance(x_bp, offsets=(0, BLOCK_K))
-        y_bp = tl.advance(y_bp, offsets=(BLOCK_K, 0))
+        x_block = tl.advance(x_block, offsets=(0, BLOCK_K))
+        y_block = tl.advance(y_block, offsets=(BLOCK_K, 0))
 
-    o_bp = tl.make_block_ptr(
+    o_block = tl.make_block_ptr(
         base=o_ptr,
         shape=(M, N),
         strides=(o_s0, o_s1),
@@ -57,7 +57,7 @@ def log_mm_fwd_kernel(
         order=(1, 0),
     )
 
-    tl.store(o_bp, (tl.log(se) + m).to(dtype=o_ptr.dtype.element_ty), boundary_check=(0, 1))
+    tl.store(o_block, (tl.log(se) + m).to(dtype=o_ptr.dtype.element_ty), boundary_check=(0, 1))
 
 
 def log_mm_fwd(x: Tensor, y: Tensor, BLOCK: int = 32):

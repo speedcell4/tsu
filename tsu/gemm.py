@@ -12,7 +12,7 @@ def gemm_fwd_kernel(
         M: tl.constexpr, BLOCK_M: tl.constexpr,
         N: tl.constexpr, BLOCK_N: tl.constexpr,
         K: tl.constexpr, BLOCK_K: tl.constexpr):
-    x_bp = tl.make_block_ptr(
+    x_block = tl.make_block_ptr(
         base=x_ptr,
         shape=(M, K),
         strides=(x_s0, x_s1),
@@ -21,7 +21,7 @@ def gemm_fwd_kernel(
         order=(1, 0),
     )
 
-    y_bp = tl.make_block_ptr(
+    y_block = tl.make_block_ptr(
         base=y_ptr,
         shape=(K, N),
         strides=(y_s0, y_s1),
@@ -33,14 +33,14 @@ def gemm_fwd_kernel(
     z = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
 
     for _ in tl.range(0, K, BLOCK_K):
-        x = tl.load(x_bp, boundary_check=(0, 1), padding_option='zero').to(dtype=tl.float32)
-        y = tl.load(y_bp, boundary_check=(0, 1), padding_option='zero').to(dtype=tl.float32)
-        z += tl.dot(x, y, allow_tf32=False)
+        x = tl.load(x_block, boundary_check=(0, 1), padding_option='zero').to(dtype=tl.float32)
+        y = tl.load(y_block, boundary_check=(0, 1), padding_option='zero').to(dtype=tl.float32)
+        z = tl.dot(x, y, acc=z, input_precision='ieee')
 
-        x_bp = tl.advance(x_bp, offsets=(0, BLOCK_K))
-        y_bp = tl.advance(y_bp, offsets=(BLOCK_K, 0))
+        x_block = tl.advance(x_block, offsets=(0, BLOCK_K))
+        y_block = tl.advance(y_block, offsets=(BLOCK_K, 0))
 
-    o_bp = tl.make_block_ptr(
+    o_block = tl.make_block_ptr(
         base=o_ptr,
         shape=(M, N),
         strides=(o_s0, o_s1),
@@ -49,7 +49,7 @@ def gemm_fwd_kernel(
         order=(1, 0),
     )
 
-    tl.store(o_bp, z.to(dtype=o_ptr.dtype.element_ty), boundary_check=(0, 1))
+    tl.store(o_block, z.to(dtype=o_ptr.dtype.element_ty), boundary_check=(0, 1))
 
 
 def gemm_fwd(x: Tensor, y: Tensor, BLOCK: int = 32):
