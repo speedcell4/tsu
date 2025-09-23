@@ -28,12 +28,12 @@ def update_lse(x: tl.tensor, lse: tl.tensor, m: tl.tensor):
 
 @triton.jit
 def lse_fwd_kernel(
-        x: tl.tensor, x_s0, x_s1,
-        o: tl.tensor, o_s0,
+        x_ptr: tl.tensor, x_s0, x_s1,
+        o_ptr: tl.tensor, o_s0,
         N: tl.constexpr, BLOCK_N: tl.constexpr,
         D: tl.constexpr, BLOCK_D: tl.constexpr):
     x_bp = tl.make_block_ptr(
-        base=x,
+        base=x_ptr,
         shape=(N, D),
         strides=(x_s0, x_s1),
         offsets=(BLOCK_N * tl.program_id(0), 0),
@@ -41,7 +41,7 @@ def lse_fwd_kernel(
         order=(1, 0),
     )
 
-    lse, x_m = init_lse(x, BLOCK_N)
+    lse, x_m = init_lse(x_ptr, BLOCK_N)
 
     for _ in tl.range(0, D, BLOCK_D):
         xs = load_block(x_bp, boundary_check=(0, 1), other=-float('inf'))
@@ -50,7 +50,7 @@ def lse_fwd_kernel(
         x_bp = tl.advance(x_bp, offsets=(0, BLOCK_D))
 
     o_bp = tl.make_block_ptr(
-        base=o,
+        base=o_ptr,
         shape=(N,),
         strides=(o_s0,),
         offsets=(BLOCK_N * tl.program_id(0),),
@@ -58,7 +58,7 @@ def lse_fwd_kernel(
         order=(0,),
     )
 
-    tl.store(o_bp, (tl.log(lse) + x_m).to(dtype=o.dtype.element_ty), boundary_check=(0,))
+    tl.store(o_bp, (tl.log(lse) + x_m).to(dtype=o_ptr.dtype.element_ty), boundary_check=(0,))
 
 
 def lse_fwd(x: Tensor, BLOCK: int = 128):

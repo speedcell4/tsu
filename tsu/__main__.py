@@ -1,6 +1,6 @@
 from aku import Aku
 
-from tsu.lse import run_lse
+from tsu.gemm import run_gemm
 
 aku = Aku()
 
@@ -10,7 +10,7 @@ def hello():
     print('hello, world!')
 
 
-aku.register(run_lse)
+aku.register(run_gemm)
 
 if __name__ == '__main__':
     aku.run()
