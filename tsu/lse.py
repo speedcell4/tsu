@@ -28,10 +28,10 @@ def update_se(x: tl.tensor, se: tl.tensor, m: tl.tensor):
 
 @triton.jit
 def lse_fwd_kernel(
-        x_ptr: tl.tensor, x_s0, x_s1,
-        o_ptr: tl.tensor, o_s0,
-        N: tl.constexpr, BLOCK_N: tl.constexpr,
-        D: tl.constexpr, BLOCK_D: tl.constexpr):
+        x_ptr: tl.tensor, x_s0: int, x_s1: int,
+        o_ptr: tl.tensor, o_s0: int,
+        N: int, BLOCK_N: tl.constexpr,
+        D: int, BLOCK_D: tl.constexpr):
     x_block = tl.make_block_ptr(
         base=x_ptr,
         shape=(N, D),

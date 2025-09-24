@@ -7,12 +7,12 @@ from torch import Tensor
 
 @triton.jit
 def log_mm_fwd_kernel(
-        x_ptr: tl.tensor, x_s0, x_s1,
-        y_ptr: tl.tensor, y_s0, y_s1,
-        o_ptr: tl.tensor, o_s0, o_s1,
-        M: tl.constexpr, BLOCK_M: tl.constexpr,
-        N: tl.constexpr, BLOCK_N: tl.constexpr,
-        K: tl.constexpr, BLOCK_K: tl.constexpr):
+        x_ptr: tl.tensor, x_s0: int, x_s1: int,
+        y_ptr: tl.tensor, y_s0: int, y_s1: int,
+        o_ptr: tl.tensor, o_s0: int, o_s1: int,
+        M: int, BLOCK_M: tl.constexpr,
+        N: int, BLOCK_N: tl.constexpr,
+        K: int, BLOCK_K: tl.constexpr):
     x_block = tl.make_block_ptr(
         base=x_ptr,
         shape=(M, K),
